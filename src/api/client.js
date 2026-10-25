@@ -20,4 +20,13 @@ export const reportsApi = {
   file: (id, inline) => api.get(`/reports/${id}/download`, { params: inline ? { disposition: 'inline' } : {}, responseType: 'blob' }),
   remove: id => api.delete(`/reports/${id}`).then(r => r.data),
 }
+export const appointmentsApi = {
+  hospitals: params => api.get('/hospitals', { params }).then(r => r.data),
+  doctors: (hospitalId, params) => api.get(`/hospitals/${hospitalId}/doctors`, { params }).then(r => r.data),
+  availability: (doctorId, params) => api.get(`/doctors/${doctorId}/availability`, { params }).then(r => r.data),
+  list: () => api.get('/appointments').then(r => r.data),
+  create: data => api.post('/appointments', data).then(r => r.data),
+  cancel: id => api.post(`/appointments/${id}/cancel`).then(r => r.data),
+  reschedule: (id, data) => api.post(`/appointments/${id}/reschedule`, data).then(r => r.data),
+}
 export default api

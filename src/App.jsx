@@ -5,6 +5,7 @@ import Landing from './pages/Landing.jsx'
 import Login from './pages/Login.jsx'
 import Register from './pages/Register.jsx'
 import Reports from './pages/Reports.jsx'
+import AppointmentsPage from './pages/AppointmentsPage.jsx'
 import { Overview, Profile } from './pages/Basic.jsx'
 export default function App() {
   return (
@@ -15,6 +16,8 @@ export default function App() {
       <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
         <Route path="/overview" element={<Overview />} />
         <Route path="/reports" element={<Reports />} />
+        <Route path="/appointments" element={<AppointmentsPage />} />
+        <Route path="/appointments/my" element={<AppointmentsPage />} />
         <Route path="/profile" element={<Profile />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -73,7 +73,7 @@ export function ReportTable({ reports, onPreview, onDownload, onDelete }) {
         <button onClick={() => onDelete(r)} aria-label={`Delete ${r.title}`} className="rounded-lg p-2 hover:bg-red-50 hover:text-red-600"><Trash2 size={17} /></button></div></td></tr>))}</tbody></table></div></div>)
 }
 export const TableSkeleton = () => (<div className="panel space-y-3 p-4">{[0, 1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>)
-export const EmptyState = ({ filtered, onClear }) => (<div className="panel grid place-items-center px-6 py-14 text-center"><span className="grid h-14 w-14 place-items-center rounded-2xl bg-teal-100 text-teal-700"><FolderOpen size={28} /></span>
+export const EmptyState = ({ filtered, onClear }) => (<div className="panel grid place-items-center px-6 py-14 text-center"><span className="grid h-14 w-14 place-items-center rounded-md bg-teal-100 text-teal-900"><FolderOpen size={26} /></span>
   <h3 className="mt-4 text-xl font-semibold">{filtered ? 'No reports match your filters' : 'No reports yet'}</h3>
   <p className="mt-1 max-w-sm text-sm text-navy-500">{filtered ? 'Try a different search or category.' : 'Upload your first PDF or image above to start building your record.'}</p>
   {filtered && <button className="btn-outline mt-4" onClick={onClear}>Clear filters</button>}</div>)
