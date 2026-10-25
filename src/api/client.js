@@ -1,0 +1,23 @@
+import axios from 'axios'
+// Cookie-based auth: the JWT lives in an HTTP-only cookie the browser sends automatically.
+// X-Requested-With is the CSRF guard header the server requires on non-GET requests.
+const api = axios.create({ baseURL: '/api', withCredentials: true, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+export const errMsg = e => e.response?.data?.message || (e.request ? 'Cannot reach the server. Is the backend running?' : e.message)
+api.interceptors.response.use(r => r, e => {
+  if (e.response?.status === 401 && !e.config.url.startsWith('/auth/')) window.dispatchEvent(new Event('medlink:unauthorized'))
+  return Promise.reject(e)
+})
+export const authApi = {
+  register: d => api.post('/auth/register', d).then(r => r.data),
+  login: d => api.post('/auth/login', d).then(r => r.data),
+  logout: () => api.post('/auth/logout').then(r => r.data),
+  me: () => api.get('/auth/me').then(r => r.data),
+}
+export const reportsApi = {
+  list: params => api.get('/reports', { params }).then(r => r.data),
+  summary: () => api.get('/reports/summary').then(r => r.data),
+  upload: (formData, onProgress) => api.post('/reports/upload', formData, { onUploadProgress: e => e.total && onProgress?.(Math.round((e.loaded / e.total) * 100)) }).then(r => r.data),
+  file: (id, inline) => api.get(`/reports/${id}/download`, { params: inline ? { disposition: 'inline' } : {}, responseType: 'blob' }),
+  remove: id => api.delete(`/reports/${id}`).then(r => r.data),
+}
+export default api

@@ -1,0 +1,13 @@
+const router = require('express').Router()
+const c = require('../controllers/reportController')
+const { protect } = require('../middleware/authMiddleware')
+const { upload } = require('../middleware/upload')
+const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
+router.use(protect)
+router.get('/', wrap(c.list))
+router.get('/summary', wrap(c.summary))
+router.post('/upload', upload, wrap(c.upload))
+router.get('/:id', wrap(c.getOne))
+router.get('/:id/download', wrap(c.download))
+router.delete('/:id', wrap(c.remove))
+module.exports = router

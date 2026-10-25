@@ -1,0 +1,12 @@
+const router = require('express').Router()
+const rateLimit = require('express-rate-limit')
+const c = require('../controllers/authController')
+const { protect } = require('../middleware/authMiddleware')
+const { validateRegister, validateLogin } = require('../middleware/validate')
+const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
+const limiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 50, standardHeaders: true, legacyHeaders: false, message: { message: 'Too many attempts. Try again later.' } })
+router.post('/register', limiter, validateRegister, wrap(c.register))
+router.post('/login', limiter, validateLogin, wrap(c.login))
+router.post('/logout', c.logout)
+router.get('/me', protect, c.me)
+module.exports = router
