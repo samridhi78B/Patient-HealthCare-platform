@@ -12,13 +12,15 @@ const issue = (res, user, remember) => {
 }
 exports.register = async (req, res) => {
   const { name, email, phone, password } = req.body
-  if (await User.findOne({ email: email.toLowerCase() })) return res.status(409).json({ message: 'An account with this email already exists' })
-  const user = await User.create({ name, email, phone, password: await bcrypt.hash(password, 12) })
+  const normalizedEmail = email.trim().toLowerCase()
+  if (await User.findOne({ email: normalizedEmail })) return res.status(409).json({ message: 'An account with this email already exists' })
+  const user = await User.create({ name, email: normalizedEmail, phone, password: await bcrypt.hash(password, 12) })
   res.status(201).json({ message: 'Account created. You can now log in.', user: publicUser(user) })
 }
 exports.login = async (req, res) => {
   const { email, password, remember } = req.body
-  const user = await User.findOne({ email: email.toLowerCase() }).select('+password')
+  const normalizedEmail = email.trim().toLowerCase()
+  const user = await User.findOne({ email: normalizedEmail }).select('+password')
   // Same message for unknown email and wrong password to avoid account enumeration.
   if (!user || !(await bcrypt.compare(password, user.password))) return res.status(401).json({ message: 'Invalid email or password' })
   issue(res, user, !!remember)

@@ -8,5 +8,6 @@ export function AuthProvider({ children }) {
   useEffect(() => { const f = () => setUser(null); window.addEventListener('medlink:unauthorized', f); return () => window.removeEventListener('medlink:unauthorized', f) }, [])
   const login = useCallback(async creds => { const d = await authApi.login(creds); setUser(d.user); return d.user }, [])
   const logout = useCallback(async () => { try { await authApi.logout() } finally { setUser(null) } }, [])
-  return <Ctx.Provider value={{ user, loading, login, logout }}>{children}</Ctx.Provider>
+  const updateUser = useCallback(updates => setUser(current => current ? { ...current, ...updates } : current), [])
+  return <Ctx.Provider value={{ user, loading, login, logout, updateUser }}>{children}</Ctx.Provider>
 }

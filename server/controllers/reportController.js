@@ -8,6 +8,7 @@ const { CATEGORIES } = MedicalReport
 const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const httpErr = (status, message) => Object.assign(new Error(message), { status })
 const filePath = r => path.join(STORAGE_DIR, path.basename(r.storedName))
+const validDate = value => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00.000Z`)) && new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) === value
 
 // Every lookup is scoped by owner, so another patient's id behaves exactly like a missing id (404).
 async function findOwned(req) {
@@ -45,6 +46,38 @@ exports.upload = async (req, res) => {
   } catch (e) { await fsp.unlink(req.file.path).catch(() => {}); throw e }
 }
 exports.getOne = async (req, res) => res.json({ report: await findOwned(req) })
+exports.addTestResult = async (req, res) => {
+  const { testName, value, unit, testDate } = req.body || {}
+  if (typeof testName !== 'string' || !testName.trim() || testName.trim().length > 120) throw httpErr(400, 'Test name is required and must be 120 characters or fewer')
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw httpErr(400, 'Enter a valid numeric test value')
+  if (typeof unit !== 'string' || !unit.trim() || unit.trim().length > 40) throw httpErr(400, 'Unit is required and must be 40 characters or fewer')
+  if (typeof testDate !== 'string' || !validDate(testDate) || new Date(`${testDate}T00:00:00.000Z`) > new Date()) throw httpErr(400, 'Enter a valid test date that is not in the future')
+  const report = await findOwned(req)
+  report.testResults.push({ testName: testName.trim(), value, unit: unit.trim(), testDate: new Date(`${testDate}T00:00:00.000Z`) })
+  await report.save()
+  res.status(201).json({ message: 'Structured test result saved', report })
+}
+exports.updateTestResult = async (req, res) => {
+  const { testName, value, unit, testDate } = req.body || {}
+  if (typeof testName !== 'string' || !testName.trim() || testName.trim().length > 120) throw httpErr(400, 'Test name is required and must be 120 characters or fewer')
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw httpErr(400, 'Enter a valid numeric test value')
+  if (typeof unit !== 'string' || !unit.trim() || unit.trim().length > 40) throw httpErr(400, 'Unit is required and must be 40 characters or fewer')
+  if (typeof testDate !== 'string' || !validDate(testDate) || new Date(`${testDate}T00:00:00.000Z`) > new Date()) throw httpErr(400, 'Enter a valid test date that is not in the future')
+  const report = await findOwned(req)
+  const result = report.testResults.id(req.params.resultId)
+  if (!result) throw httpErr(404, 'Structured test result not found')
+  result.set({ testName: testName.trim(), value, unit: unit.trim(), testDate: new Date(`${testDate}T00:00:00.000Z`) })
+  await report.save()
+  res.json({ message: 'Structured test result updated', report })
+}
+exports.removeTestResult = async (req, res) => {
+  const report = await findOwned(req)
+  const result = report.testResults.id(req.params.resultId)
+  if (!result) throw httpErr(404, 'Structured test result not found')
+  result.deleteOne()
+  await report.save()
+  res.json({ message: 'Structured test result deleted', report })
+}
 exports.download = async (req, res) => {
   const r = await findOwned(req)
   if (!fs.existsSync(filePath(r))) throw httpErr(410, 'The stored file is missing')

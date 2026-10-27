@@ -32,8 +32,7 @@ export default function HospitalSelection({ hospitals, selectedHospital, onSelec
               </div>
               <p className="mt-3 text-sm text-navy-500">{hospital.address}</p>
               <div className="mt-4 flex flex-wrap gap-2">{hospital.specialties.map(s => <span key={s} className="bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-700">{s}</span>)}</div>
-              <div className="mt-auto pt-5">
-                {hospital.isDemo && <p className="mb-3 text-xs font-semibold text-amber-700">Demonstration listing</p>}
+<div className="mt-auto pt-5">
                 <button className="btn-primary w-full" type="button" onClick={() => onSelect(hospital)}>{selectedHospital?._id === hospital._id ? 'Selected — continue' : 'View doctors'}</button>
               </div>
             </article>
