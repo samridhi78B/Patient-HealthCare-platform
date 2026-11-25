@@ -83,10 +83,41 @@ export function Modal({ title, onClose, wide, children }) {
   return (<div className="fixed inset-0 z-50 grid place-items-center bg-ink/55 p-4" onClick={onClose}><div role="dialog" aria-modal="true" aria-label={title} onClick={e => e.stopPropagation()} className={`panel flex max-h-[90vh] w-full flex-col p-5 ${wide ? 'max-w-4xl' : 'max-w-md'}`}>
     <div className="mb-3 flex items-center justify-between gap-3"><h3 className="truncate text-xl font-semibold">{title}</h3><button onClick={onClose} aria-label="Close"><X size={18} /></button></div>{children}</div></div>)
 }
-export function PreviewModal({ report, blobUrl, loading, error, onClose }) {
-  return (<Modal wide title={report.title} onClose={onClose}><div className="grid min-h-[50vh] flex-1 place-items-center overflow-auto rounded-lg bg-teal-50">
-    {loading ? <Loader2 className="animate-spin text-teal-600" /> : error ? <p className="text-sm text-red-600">{error}</p> :
-      report.mimeType === 'application/pdf' ? <iframe title="PDF preview" src={blobUrl} className="h-[70vh] w-full rounded-lg" /> : <img src={blobUrl} alt={report.title} className="max-h-[70vh] object-contain" />}</div></Modal>)
+export function PreviewModal({ report, blobUrl, loading, error, onClose, onGenerateSummary, summaryLoading, summaryError }) {
+  const summary = report.aiSummary
+  return (<Modal wide title={report.title} onClose={onClose}><div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+    <div className="grid min-h-[45vh] place-items-center overflow-auto rounded-lg bg-teal-50">
+      {loading ? <Loader2 className="animate-spin text-teal-600" /> : error ? <p className="p-5 text-sm text-red-600">{error}</p> :
+        report.mimeType === 'application/pdf' ? <iframe title="PDF preview" src={blobUrl} className="h-[60vh] w-full rounded-lg" /> : <img src={blobUrl} alt={report.title} className="max-h-[60vh] object-contain" />}
+    </div>
+    <section className="rounded-xl border border-ink/10 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3"><div><h4 className="font-semibold">AI medical summary</h4><p className="mt-1 text-xs text-navy-500">Informational only—not a medical diagnosis.</p></div>
+        <button className="btn-primary" type="button" disabled={loading || summaryLoading} onClick={onGenerateSummary}>
+          {summaryLoading ? <Loader2 size={16} className="animate-spin" /> : null}
+          {summaryLoading ? 'Generating…' : summary ? 'Regenerate summary' : 'Generate AI Summary'}
+        </button>
+      </div>
+      <p className="mt-2 text-xs text-navy-500">When you generate a summary, report text is sent to the OpenAI API configured by MedLink. Do not continue unless the patient has agreed.</p>
+      {summaryError && <p role="alert" className="mt-3 text-sm text-red-700">{summaryError}</p>}
+      {summaryLoading && <p role="status" className="mt-3 text-sm text-navy-500">Reading the report and preparing a summary…</p>}
+      {summary && <div className="mt-4 space-y-4 text-sm">
+        <p><b>Overview:</b> {summary.overview}</p>
+        <div><h5 className="font-semibold">Important parameters</h5>
+          {!summary.parameters.length ? <p className="mt-1 text-navy-500">No parameters extracted.</p> : <ul className="mt-2 space-y-2">{summary.parameters.map((item, index) => <li key={`${item.name}-${index}`} className="rounded-lg bg-sage-100/60 p-3">
+            <p className="font-medium">{item.name}: {item.value}{item.unit ? ` ${item.unit}` : ''}</p>
+            <p className="text-xs text-navy-500">{item.referenceRange ? `Reference range: ${item.referenceRange} · ` : 'Reference range: Not provided · '}{item.status.replaceAll('_', ' ')}</p>
+            {item.explanation && <p className="mt-1">{item.explanation}</p>}
+            {item.evidence && <p className="mt-1 text-xs text-navy-500">Report text: “{item.evidence}”</p>}
+          </li>)}</ul>}
+        </div>
+        {summary.terminology.length > 0 && <div><h5 className="font-semibold">Medical terms in simple language</h5><ul className="mt-1 list-disc space-y-1 pl-5">{summary.terminology.map((item, index) => <li key={`${item.term}-${index}`}><b>{item.term}:</b> {item.explanation}</li>)}</ul></div>}
+        {summary.explicitDiagnoses.length > 0 && <div><h5 className="font-semibold">Diagnoses explicitly written in the report (not verified)</h5><ul className="mt-1 list-disc pl-5">{summary.explicitDiagnoses.map((item, index) => <li key={`${item.text}-${index}`}>{item.text} <span className="text-xs text-navy-500">Evidence: “{item.evidence}”</span></li>)}</ul></div>}
+        {summary.observationsToDiscuss.length > 0 && <div><h5 className="font-semibold">Observations to discuss with a doctor</h5><ul className="mt-1 list-disc pl-5">{summary.observationsToDiscuss.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul></div>}
+        {summary.missingOrUnclear.length > 0 && <div><h5 className="font-semibold">Missing or unclear information</h5><ul className="mt-1 list-disc pl-5">{summary.missingOrUnclear.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul></div>}
+        <p className="border-t border-ink/10 pt-3 text-xs text-navy-500">Generated {new Date(summary.generatedAt).toLocaleString()} · {summary.disclaimer}</p>
+      </div>}
+    </section>
+  </div></Modal>)
 }
 export const ConfirmDialog = ({ report, busy, onCancel, onConfirm }) => (<Modal title="Delete this report?" onClose={onCancel}>
   <p className="text-sm text-navy-500"><b className="text-navy-900">{report.title}</b> and its stored file will be permanently deleted. This cannot be undone.</p>

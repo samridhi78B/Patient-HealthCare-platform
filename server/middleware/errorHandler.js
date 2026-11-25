@@ -8,5 +8,9 @@ exports.errorHandler = (err, req, res, _next) => {
   if (err.code === 11000) return res.status(409).json({ message: 'That value is already in use' })
   const status = err.status || 500
   if (status === 500) console.error(err)
-  res.status(status).json({ message: status === 500 ? 'Something went wrong on the server' : err.message })
+  const message = status === 500 ? 'Something went wrong on the server' : err.message
+  const body = { message }
+  if (status === 429) body.error = message
+  if (err.code) body.code = err.code
+  res.status(status).json(body)
 }

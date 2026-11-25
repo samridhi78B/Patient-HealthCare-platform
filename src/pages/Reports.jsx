@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { FileHeart, Search, UploadCloud } from 'lucide-react'
 import { reportsApi, errMsg } from '../api/client'
 import { useToast } from '../context/ToastContext.jsx'
 import { CATEGORIES, SummaryCards, RecentUploads, UploadPanel, ReportTable, TableSkeleton, EmptyState, PreviewModal, ConfirmDialog } from '../components/reportUi.jsx'
 export default function Reports() {
+  const location = useLocation()
   const toast = useToast()
   const [reports, setReports] = useState([]); const [summary, setSummary] = useState(null); const [loading, setLoading] = useState(true); const [loadErr, setLoadErr] = useState('')
   const [search, setSearch] = useState(''); const [q, setQ] = useState(''); const [category, setCategory] = useState(''); const [sort, setSort] = useState('newest')
   const [preview, setPreview] = useState(null); const [confirm, setConfirm] = useState(null); const [deleting, setDeleting] = useState(false)
+  const openedReportId = useRef('')
   useEffect(() => { const t = setTimeout(() => setQ(search), 300); return () => clearTimeout(t) }, [search])
   const load = useCallback(async () => {
     setLoading(true); setLoadErr('')
@@ -15,14 +18,37 @@ export default function Reports() {
     catch (e) { setLoadErr(errMsg(e)) } finally { setLoading(false) }
   }, [q, category, sort])
   useEffect(() => { load() }, [load])
-  useEffect(() => () => preview?.url && URL.revokeObjectURL(preview.url), [preview])
+  useEffect(() => () => preview?.url && URL.revokeObjectURL(preview.url), [preview?.url])
   const upload = async (fd, onProgress) => {
     try { const d = await reportsApi.upload(fd, onProgress); toast.success(d.message); await load() } catch (e) { throw errMsg(e) }
   }
   const openPreview = async r => {
     setPreview({ report: r, loading: true })
-    try { const res = await reportsApi.file(r._id, true); setPreview({ report: r, url: URL.createObjectURL(res.data) }) }
+    try {
+      const [detail, res] = await Promise.all([reportsApi.get(r._id), reportsApi.file(r._id, true)])
+      setPreview({ report: detail.report, url: URL.createObjectURL(res.data) })
+    }
     catch (e) { setPreview({ report: r, error: 'Could not load the preview. ' + (e.response?.status === 404 ? 'The report was not found.' : errMsg(e)) }) }
+  }
+  useEffect(() => {
+    const reportId = new URLSearchParams(location.search).get('report')
+    if (!reportId || loading || openedReportId.current === reportId) return
+    const report = reports.find(item => item._id === reportId)
+    if (report) {
+      openedReportId.current = reportId
+      openPreview(report)
+    }
+  }, [location.search, loading, reports])
+  const generateAiSummary = async () => {
+    const reportId = preview?.report?._id
+    if (!reportId) return
+    setPreview(current => current ? { ...current, summaryLoading: true, summaryError: '' } : current)
+    try {
+      const result = await reportsApi.generateAiSummary(reportId)
+      setPreview(current => current ? { ...current, report: result.report, summaryLoading: false, summaryError: '' } : current)
+    } catch (e) {
+      setPreview(current => current ? { ...current, summaryLoading: false, summaryError: errMsg(e) } : current)
+    }
   }
   const download = async r => {
     try { const res = await reportsApi.file(r._id, false); const u = URL.createObjectURL(res.data); const a = document.createElement('a'); a.href = u; a.download = r.originalName; a.click(); URL.revokeObjectURL(u); toast.success('Download started') }
@@ -48,7 +74,7 @@ export default function Reports() {
       : loading ? <TableSkeleton /> : !reports.length ? <EmptyState filtered={filtered} onClear={() => { setSearch(''); setCategory('') }} />
       : <ReportTable reports={reports} onPreview={openPreview} onDownload={download} onDelete={setConfirm} />}
     </section>
-    {preview && <PreviewModal report={preview.report} blobUrl={preview.url} loading={preview.loading} error={preview.error} onClose={() => setPreview(null)} />}
+    {preview && <PreviewModal report={preview.report} blobUrl={preview.url} loading={preview.loading} error={preview.error} summaryLoading={preview.summaryLoading} summaryError={preview.summaryError} onGenerateSummary={generateAiSummary} onClose={() => setPreview(null)} />}
     {confirm && <ConfirmDialog report={confirm} busy={deleting} onCancel={() => setConfirm(null)} onConfirm={remove} />}
   </div>)
 }

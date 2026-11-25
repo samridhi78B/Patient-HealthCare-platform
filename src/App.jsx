@@ -10,6 +10,10 @@ import HealthTimeline from './pages/HealthTimeline.jsx'
 import HealthJournal from './pages/HealthJournal.jsx'
 import HealthMetrics from './pages/HealthMetrics.jsx'
 import Profile from './pages/Profile.jsx'
+import ClinicianLogin from './pages/ClinicianLogin.jsx'
+import ClinicianDashboard from './pages/ClinicianDashboard.jsx'
+import ClinicianRoute from './components/ClinicianRoute.jsx'
+import EmergencyAccess from './pages/EmergencyAccess.jsx'
 import { Overview } from './pages/Basic.jsx'
 export default function App() {
   return (
@@ -17,6 +21,9 @@ export default function App() {
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/clinician/login" element={<ClinicianLogin />} />
+      <Route path="/emergency/:token" element={<EmergencyAccess />} />
+      <Route path="/clinician/dashboard" element={<ClinicianRoute><ClinicianDashboard /></ClinicianRoute>} />
       <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
         <Route path="/overview" element={<Overview />} />
         <Route path="/health-metrics" element={<HealthMetrics />} />

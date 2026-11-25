@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Activity, CalendarDays, FileHeart, Pencil, ShieldCheck, UserRound } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { errMsg, measurementsApi, profileApi } from '../api/client'
+import { errMsg, historyApi, measurementsApi, profileApi } from '../api/client'
 import { useAuth } from '../context/AuthContext.jsx'
 
 const emptyForm = (profile, user) => ({
@@ -35,6 +35,7 @@ export default function Profile() {
   const { user } = useAuth()
   const [profile, setProfile] = useState(null)
   const [measurements, setMeasurements] = useState([])
+  const [historyItems, setHistoryItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [retry, setRetry] = useState(0)
@@ -44,13 +45,14 @@ export default function Profile() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [gender, setGender] = useState('')
+  const [qrBusy, setQrBusy] = useState(false)
 
   useEffect(() => {
     let active = true
     setLoading(true)
     setLoadError('')
-    Promise.allSettled([profileApi.get(), measurementsApi.list()])
-      .then(([profileResult, measurementsResult]) => {
+    Promise.allSettled([profileApi.get(), measurementsApi.list(), historyApi.list(), profileApi.getEmergencyQr()])
+      .then(([profileResult, measurementsResult, historyResult, qrResult]) => {
         if (!active) return
         const failures = []
         if (profileResult.status === 'fulfilled') {
@@ -60,6 +62,11 @@ export default function Profile() {
         } else failures.push(errMsg(profileResult.reason))
         if (measurementsResult.status === 'fulfilled') setMeasurements(measurementsResult.value.measurements)
         else failures.push(errMsg(measurementsResult.reason))
+        if (historyResult.status === 'fulfilled') setHistoryItems(historyResult.value.items)
+        else failures.push(errMsg(historyResult.reason))
+        if (qrResult.status === 'fulfilled' && profileResult.status === 'fulfilled') {
+          setProfile(current => ({ ...current, emergencyQr: qrResult.value.emergencyQr }))
+        } else if (qrResult.status === 'rejected') failures.push(errMsg(qrResult.reason))
         if (failures.length) setLoadError(failures.join(' · '))
       }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
@@ -73,6 +80,35 @@ export default function Profile() {
   const genderKeys = { Female: 'common.genderFemale', Male: 'common.genderMale', 'Non-binary': 'common.genderNonBinary', 'Prefer not to say': 'common.genderNotSay' }
   const genderLabel = genderKeys[gender] ? t(genderKeys[gender]) : gender
   const updateField = event => setForm(current => ({ ...current, [event.target.name]: event.target.value }))
+
+  const regenerateQr = async () => {
+    if (!window.confirm('Generate a new QR code? Any previous copy will stop working.')) return
+    setQrBusy(true)
+    setError('')
+    try {
+      const result = await profileApi.regenerateEmergencyQr()
+      setProfile(current => ({ ...current, emergencyQr: result.emergencyQr }))
+      setSuccess(result.message)
+    } catch (reason) { setError(errMsg(reason)) } finally { setQrBusy(false) }
+  }
+
+  const revokeQr = async () => {
+    if (!window.confirm('Revoke the emergency QR code? It will no longer open an emergency access request.')) return
+    setQrBusy(true)
+    setError('')
+    try {
+      const result = await profileApi.revokeEmergencyQr()
+      setProfile(current => ({ ...current, emergencyQr: result.emergencyQr }))
+      setSuccess(result.message)
+    } catch (reason) { setError(errMsg(reason)) } finally { setQrBusy(false) }
+  }
+
+  const reviewFinding = async item => {
+    try {
+      const result = await historyApi.review(item._id)
+      setHistoryItems(current => current.map(value => value._id === item._id ? result.item : value))
+    } catch (reason) { setError(errMsg(reason)) }
+  }
 
   const saveProfile = async event => {
     event.preventDefault()
@@ -94,7 +130,7 @@ export default function Profile() {
         currentMedications: form.currentMedications.split('\n').map(item => item.trim()).filter(Boolean),
         emergencyContacts: contacts, medicalNotes: form.medicalNotes,
       })
-      setProfile(updated)
+      setProfile(current => ({ ...updated, emergencyQr: current?.emergencyQr }))
       setForm(emptyForm(updated, { ...user, name: updated.name }))
       setEditing(false)
       setGender(updated.gender || '')
@@ -112,6 +148,7 @@ export default function Profile() {
         <button type="button" className="btn-primary" onClick={() => { setForm(emptyForm(profile, user)); setError(''); setEditing(true) }}><Pencil size={15} />{t('dashboard.editHealthProfile')}</button>
       </header>
       {loadError && <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{t('common.error')} {loadError} <button type="button" className="ml-2 underline" onClick={() => setRetry(value => value + 1)}>{t('common.retry')}</button></p>}
+      {error && !editing && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {success && <p role="status" className="rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-800">{success}</p>}
       {loading ? <p role="status" className="health-panel p-5 text-sm text-navy-500">{t('dashboard.loading')}</p> : (
         <div className="grid gap-5 xl:grid-cols-[.8fr_1.2fr]">
@@ -130,9 +167,32 @@ export default function Profile() {
               <Link to="/reports" className="btn-outline"><FileHeart size={15} />{t('nav.reports')}</Link>
               <Link to="/appointments" className="btn-outline"><CalendarDays size={15} />{t('nav.appointments')}</Link>
             </div>
+            <section className="mt-6 border-t border-ink/10 pt-5">
+              <h3 className="text-lg font-semibold">Emergency QR code</h3>
+              <p className="mt-1 text-xs leading-5 text-navy-500">The QR contains a random access token only, not your medical details. Verified clinicians must sign in and state a reason before they can view anything.</p>
+              {profile?.emergencyQr?.active ? <div className="mt-3 flex flex-wrap items-center gap-4">
+                <img className="h-36 w-36 rounded-lg border border-ink/10 bg-white p-2" src={profile.emergencyQr.qrCodeDataUrl} alt="Your emergency medical access QR code" />
+                <div><p className="text-xs text-navy-500">Expires {new Date(profile.emergencyQr.expiresAt).toLocaleDateString()}</p>
+                  <a className="btn-outline mt-3 inline-flex" href={profile.emergencyQr.qrCodeDataUrl} download="medlink-emergency-qr.png">Download QR</a>
+                  <div className="mt-3 flex flex-wrap gap-2"><button className="btn-outline" type="button" disabled={qrBusy} onClick={regenerateQr}>Regenerate</button><button className="btn-outline text-red-700" type="button" disabled={qrBusy} onClick={revokeQr}>Revoke</button></div></div>
+              </div> : <div className="mt-3"><p className="text-sm text-navy-500">Your emergency QR is revoked.</p><button className="btn-primary mt-3" type="button" disabled={qrBusy} onClick={regenerateQr}>Generate a new QR</button></div>}
+            </section>
           </section>
 
           <section className="space-y-5">
+            <div className="health-panel p-5 sm:p-6">
+              <p className="section-kicker">Reviewable history</p><h2 className="mt-1 text-xl">Report findings and medical records</h2>
+              <p className="mt-1 text-xs text-navy-500">AI-extracted findings remain unverified until reviewed. A patient review does not make an AI observation a confirmed diagnosis.</p>
+              {!historyItems.length ? <p className="mt-3 text-sm text-navy-500">Not provided</p> : <ul className="mt-3 space-y-3">
+                {historyItems.map(item => <li key={item._id} className="rounded-xl border border-ink/10 p-3">
+                  <p className="font-semibold">{item.title}{item.value ? `: ${item.value} ${item.unit || ''}` : ''}</p>
+                  <p className="mt-1 text-xs text-navy-500">{item.source === 'report-extracted' ? 'Document-extracted' : item.source === 'clinician-entered' ? 'Doctor-entered' : 'Patient-entered'} · {item.verificationStatus.replace('-', ' ')}</p>
+                  {item.report?._id && <Link className="mt-2 inline-block text-xs font-semibold text-teal-700 underline" to={`/reports?report=${item.report._id}`}>Open original report: {item.report.title}</Link>}
+                  {!item.report && item.sourceReportTitle && <p className="mt-2 text-xs text-navy-500">Original report: {item.sourceReportTitle} (deleted)</p>}
+                  {item.source === 'report-extracted' && item.verificationStatus === 'unreviewed' && <button className="btn-outline mt-2 text-xs" type="button" onClick={() => reviewFinding(item)}>Mark as reviewed by me</button>}
+                </li>)}
+              </ul>}
+            </div>
             <div className="health-panel p-5 sm:p-6">
               <div className="flex items-start justify-between gap-3"><div><p className="section-kicker">{t('dashboard.healthMetrics')}</p><h2 className="mt-1 text-xl">{t('dashboard.personalDetails')}</h2></div><Link to="/health-metrics" aria-label={t('nav.healthMetrics')} className="rounded-lg p-2 text-blue-700 hover:bg-blue-50"><Activity size={18} /></Link></div>
               {latest ? <div className="mt-4 grid gap-3 sm:grid-cols-3">

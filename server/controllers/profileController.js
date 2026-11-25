@@ -1,4 +1,5 @@
-const mongoose = require('mongoose')
+const User = require('../models/User')
+const { getQrForPatient, revokeQr } = require('../services/emergencyService')
 
 const httpErr = (status, message) => Object.assign(new Error(message), { status })
 const PROFILE_FIELDS = ['name', 'phone', 'dateOfBirth', 'gender', 'address', 'bloodGroup', 'allergies', 'medicalConditions', 'currentMedications', 'emergencyContacts', 'medicalNotes']
@@ -26,9 +27,35 @@ const publicProfile = user => ({
 })
 
 exports.get = async (req, res) => {
-  const user = await mongoose.model('User').findById(req.user._id)
+  const user = await User.findById(req.user._id)
   if (!user) throw httpErr(404, 'Patient profile not found')
   res.json({ profile: publicProfile(user) })
+}
+
+exports.getQr = async (req, res) => {
+  const user = await User.findById(req.user._id)
+    .select('+emergencyQrTokenHash +emergencyQrTokenEncrypted +emergencyQrTokenIv +emergencyQrTokenTag')
+  if (!user) throw httpErr(404, 'Patient profile not found')
+  const emergencyQr = await getQrForPatient(user, req)
+  res.set('Cache-Control', 'private, no-store')
+  res.json({ emergencyQr })
+}
+
+exports.regenerateQr = async (req, res) => {
+  const user = await User.findById(req.user._id)
+    .select('+emergencyQrTokenHash +emergencyQrTokenEncrypted +emergencyQrTokenIv +emergencyQrTokenTag')
+  if (!user) throw httpErr(404, 'Patient profile not found')
+  const emergencyQr = await getQrForPatient(user, req, true)
+  res.set('Cache-Control', 'private, no-store')
+  res.json({ message: 'A new emergency QR code was generated. The previous code no longer works.', emergencyQr })
+}
+
+exports.revokeQr = async (req, res) => {
+  const user = await User.findById(req.user._id)
+    .select('+emergencyQrTokenHash +emergencyQrTokenEncrypted +emergencyQrTokenIv +emergencyQrTokenTag')
+  if (!user) throw httpErr(404, 'Patient profile not found')
+  await revokeQr(user, req)
+  res.json({ message: 'Emergency QR code revoked', emergencyQr: { active: false, qrCodeDataUrl: null, expiresAt: null } })
 }
 
 exports.update = async (req, res) => {
@@ -68,7 +95,7 @@ exports.update = async (req, res) => {
     medicalNotes: medicalNotes.trim(),
   }
   if (gender !== undefined) updates.gender = gender.trim()
-  const user = await mongoose.model('User').findByIdAndUpdate(req.user._id, { $set: updates }, { new: true, runValidators: true })
+  const user = await User.findByIdAndUpdate(req.user._id, { $set: updates }, { new: true, runValidators: true })
   if (!user) throw httpErr(404, 'Patient profile not found')
   res.json({ message: 'Patient profile updated', profile: publicProfile(user) })
 }
