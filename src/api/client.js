@@ -8,6 +8,10 @@ api.interceptors.response.use(r => r, e => {
   if (e.response?.status === 401 && !e.config.url.startsWith('/auth/')) window.dispatchEvent(new Event('medlink:unauthorized'))
   return Promise.reject(e)
 })
+clinicianHttp.interceptors.response.use(r => r, e => {
+  if (e.response?.status === 401) window.dispatchEvent(new Event('medlink:unauthorized'))
+  return Promise.reject(e)
+})
 export const authApi = {
   register: d => api.post('/auth/register', d).then(r => r.data),
   login: d => api.post('/auth/login', d).then(r => r.data),
@@ -21,7 +25,6 @@ export const reportsApi = {
   file: (id, inline) => api.get(`/reports/${id}/download`, { params: inline ? { disposition: 'inline' } : {}, responseType: 'blob' }),
   remove: id => api.delete(`/reports/${id}`).then(r => r.data),
   get: id => api.get(`/reports/${id}`).then(r => r.data),
-  generateAiSummary: id => api.post(`/reports/${id}/ai-summary`).then(r => r.data),
   addTestResult: (id, data) => api.post(`/reports/${id}/results`, data).then(r => r.data),
   updateTestResult: (id, resultId, data) => api.put(`/reports/${id}/results/${resultId}`, data).then(r => r.data),
   removeTestResult: (id, resultId) => api.delete(`/reports/${id}/results/${resultId}`).then(r => r.data),
@@ -54,9 +57,27 @@ export const clinicianApi = {
   accessHistory: () => clinicianHttp.get('/clinician/access-history').then(r => r.data),
   revokePatientQr: patientId => clinicianHttp.post(`/clinician/patients/${patientId}/qr/revoke`).then(r => r.data),
 }
+export const doctorApi = {
+  dashboard: () => clinicianHttp.get('/doctor/dashboard').then(r => r.data),
+  patients: params => clinicianHttp.get('/doctor/patients', { params }).then(r => r.data),
+  patient: id => clinicianHttp.get(`/doctor/patients/${id}`).then(r => r.data),
+  addNote: (id, data) => clinicianHttp.post(`/doctor/patients/${id}/notes`, data).then(r => r.data),
+  appointments: params => clinicianHttp.get('/doctor/appointments', { params }).then(r => r.data),
+  updateAppointment: (id, data) => clinicianHttp.patch(`/doctor/appointments/${id}`, data).then(r => r.data),
+  rescheduleAppointment: (id, data) => clinicianHttp.post(`/doctor/appointments/${id}/reschedule`, data).then(r => r.data),
+  reports: params => clinicianHttp.get('/doctor/reports', { params }).then(r => r.data),
+  reviewReport: (id, data) => clinicianHttp.patch(`/doctor/reports/${id}/review`, data).then(r => r.data),
+  reportFile: (id, inline = false) => clinicianHttp.get(`/doctor/reports/${id}/download`, {
+    params: inline ? { disposition: 'inline' } : {},
+    responseType: 'blob',
+  }),
+  profile: () => clinicianHttp.get('/doctor/profile').then(r => r.data),
+  updateProfile: data => clinicianHttp.put('/doctor/profile', data).then(r => r.data),
+  changePassword: data => clinicianHttp.post('/doctor/profile/password', data).then(r => r.data),
+}
 export const emergencyApi = {
   openByQr: (qrToken, reason) => clinicianHttp.post('/emergency/open', { qrToken, reason }).then(r => r.data),
-  openByPatientId: (patientId, reason) => clinicianHttp.post('/emergency/open', { patientId, reason }).then(r => r.data),
+  openByPatientId: (patientId, reason, readOnly = false) => clinicianHttp.post('/emergency/open', { patientId, reason, readOnly }).then(r => r.data),
   summary: accessToken => clinicianHttp.get('/emergency/session/summary', { headers: { 'X-Emergency-Access-Token': accessToken } }).then(r => r.data),
   close: accessToken => clinicianHttp.post('/emergency/session/close', {}, { headers: { 'X-Emergency-Access-Token': accessToken } }).then(r => r.data),
   records: accessToken => clinicianHttp.get('/emergency/session/records', { headers: { 'X-Emergency-Access-Token': accessToken } }).then(r => r.data),

@@ -25,6 +25,10 @@ function assertClinician(req) {
   if (!req.user?.clinicianId) throw httpErr(403, 'Clinician identity is required before accessing patient records', 'INVALID_ROLE')
 }
 
+function assertWritable(req) {
+  if (req.emergencyAccess?.readOnly !== false) throw httpErr(403, 'QR emergency summaries are read-only', 'READ_ONLY_SESSION')
+}
+
 exports.open = async (req, res) => {
   assertClinician(req)
   const { qrToken, patientId, reason } = req.body || {}
@@ -48,8 +52,9 @@ exports.open = async (req, res) => {
   }
   if (!patient) throw httpErr(404, 'Emergency QR code is invalid, expired or revoked')
 
-  const summary = await emergencySummary(patient)
-  const session = await openEmergencyAccess({ patient, clinician: req.user, reason: reason.trim() })
+  const readOnly = Boolean(qrToken || req.body.readOnly)
+  const summary = await emergencySummary(patient, { readOnly })
+  const session = await openEmergencyAccess({ patient, clinician: req.user, reason: reason.trim(), readOnly })
   await logClinicianAction(req, patient._id, 'SUMMARY_VIEW', reason.trim())
   res.set('Cache-Control', 'private, no-store')
   res.json({ accessToken: session.token, expiresAt: session.expiresAt, summary })
@@ -59,7 +64,7 @@ exports.summary = async (req, res) => {
   assertClinician(req)
   const patient = await User.findById(req.emergencyAccess.patientId)
   if (!patient) throw httpErr(404, 'Patient not found')
-  const summary = await emergencySummary(patient)
+  const summary = await emergencySummary(patient, { readOnly: req.emergencyAccess.readOnly })
   await logClinicianAction(req, patient._id, 'SUMMARY_VIEW', req.emergencyAccess.reason)
   res.set('Cache-Control', 'private, no-store')
   res.json({ summary, expiresAt: req.emergencyAccess.expiresAt })
@@ -77,6 +82,7 @@ exports.closeSession = async (req, res) => {
 
 exports.records = async (req, res) => {
   assertClinician(req)
+  assertWritable(req)
   const patientId = req.emergencyAccess.patientId
   const [reports, items] = await Promise.all([
     MedicalReport.find({ owner: patientId })
@@ -96,6 +102,7 @@ exports.records = async (req, res) => {
 
 exports.downloadReport = async (req, res) => {
   assertClinician(req)
+  assertWritable(req)
   if (!mongoose.isValidObjectId(req.params.reportId)) throw httpErr(404, 'Report not found')
   const report = await MedicalReport.findOne({ _id: req.params.reportId, owner: req.emergencyAccess.patientId })
   if (!report) throw httpErr(404, 'Report not found')
@@ -113,6 +120,7 @@ exports.downloadReport = async (req, res) => {
 
 exports.verifyHistoryItem = async (req, res) => {
   assertClinician(req)
+  assertWritable(req)
   if (!req.user.permissions.includes('history:verify')) throw httpErr(403, 'History verification permission is required')
   if (!mongoose.isValidObjectId(req.params.itemId)) throw httpErr(404, 'Medical history item not found')
   const item = await MedicalHistoryItem.findOneAndUpdate(
@@ -138,6 +146,7 @@ exports.verifyHistoryItem = async (req, res) => {
 
 exports.addHistoryItem = async (req, res) => {
   assertClinician(req)
+  assertWritable(req)
   if (!req.user.permissions.includes('history:write')) throw httpErr(403, 'Medical history write permission is required')
   const { type, title, details = '', observedAt = '' } = req.body || {}
   if (!HISTORY_TYPES.includes(type)) throw httpErr(400, 'Choose a supported medical record type')

@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { clinicianApi, emergencyApi, errMsg } from '../api/client'
 import EmergencyPatientView from '../components/EmergencyPatientView.jsx'
+import { useAuth } from '../context/AuthContext.jsx'
 
 export default function ClinicianDashboard() {
   const navigate = useNavigate()
+  const { logout } = useAuth()
   const [clinician, setClinician] = useState(null)
   const [entries, setEntries] = useState([])
   const [patientId, setPatientId] = useState('')
@@ -37,8 +39,8 @@ export default function ClinicianDashboard() {
   }
 
   const signOut = async () => {
-    await clinicianApi.logout()
-    navigate('/clinician/login', { replace: true })
+    await logout()
+    navigate('/login', { replace: true })
   }
 
   return (

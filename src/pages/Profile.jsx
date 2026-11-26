@@ -182,7 +182,7 @@ export default function Profile() {
           <section className="space-y-5">
             <div className="health-panel p-5 sm:p-6">
               <p className="section-kicker">Reviewable history</p><h2 className="mt-1 text-xl">Report findings and medical records</h2>
-              <p className="mt-1 text-xs text-navy-500">AI-extracted findings remain unverified until reviewed. A patient review does not make an AI observation a confirmed diagnosis.</p>
+              <p className="mt-1 text-xs text-navy-500">Document-extracted findings remain unverified until reviewed. A patient review does not make an observation a confirmed diagnosis.</p>
               {!historyItems.length ? <p className="mt-3 text-sm text-navy-500">Not provided</p> : <ul className="mt-3 space-y-3">
                 {historyItems.map(item => <li key={item._id} className="rounded-xl border border-ink/10 p-3">
                   <p className="font-semibold">{item.title}{item.value ? `: ${item.value} ${item.unit || ''}` : ''}</p>

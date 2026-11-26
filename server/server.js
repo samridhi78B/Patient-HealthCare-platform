@@ -19,6 +19,7 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().t
 app.use('/api', csrfGuard)
 app.use('/api/auth', require('./routes/authRoutes'))
 app.use('/api/clinician', require('./routes/clinicianRoutes'))
+app.use('/api/doctor', require('./routes/doctorRoutes'))
 app.use('/api/emergency', require('./routes/emergencyRoutes'))
 app.use('/api/reports', require('./routes/reportRoutes'))
 app.use('/api/history', require('./routes/historyRoutes'))

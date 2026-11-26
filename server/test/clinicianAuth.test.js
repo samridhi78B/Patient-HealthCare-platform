@@ -32,6 +32,7 @@ const sampleClinician = async (verified = true) => ({
   hospital: 'MedLink Hospital',
   role: 'clinician',
   isVerified: verified,
+  status: 'pending',
 })
 
 afterEach(() => {
@@ -44,7 +45,7 @@ afterEach(() => {
 })
 
 describe('clinician authentication', () => {
-  it('registers new clinicians as unverified and hashes their password', async () => {
+  it('registers clinicians without an approval state and hashes their password', async () => {
     process.env.JWT_SECRET = 'test-secret-with-more-than-thirty-two-characters'
     let created
     stub(Clinician, 'create', async data => {
@@ -66,22 +67,25 @@ describe('clinician authentication', () => {
 
     assert.equal(res.statusCode, 201)
     assert.equal(created.role, 'clinician')
-    assert.equal(created.isVerified, false)
+    assert.equal(created.isVerified, undefined)
+    assert.match(res.body.message, /sign in/)
     assert.notEqual(created.password, 'SecureClinicianPass123')
     assert.equal(await bcrypt.compare('SecureClinicianPass123', created.password), true)
   })
 
-  it('does not issue a session to a clinician whose verification is pending', async () => {
+  it('issues a session to a legacy pending clinician with isVerified false', async () => {
+    process.env.JWT_SECRET = 'test-secret-with-more-than-thirty-two-characters'
     const clinician = await sampleClinician(false)
     stub(Clinician, 'findOne', () => ({ select: async () => clinician }))
     const res = response()
     await controller.login({ body: { email: clinician.email, password: 'SecureClinicianPass123' } }, res)
-    assert.equal(res.statusCode, 403)
-    assert.equal(res.body.code, 'NOT_VERIFIED')
-    assert.equal(res.cookieValue, null)
+    const decoded = jwt.verify(res.cookieValue, process.env.JWT_SECRET)
+    assert.equal(res.statusCode, 200)
+    assert.equal(decoded.role, 'clinician')
+    assert.equal(res.body.clinician.isVerified, undefined)
   })
 
-  it('issues a role-scoped HttpOnly session to a verified clinician', async () => {
+  it('issues a role-scoped HttpOnly session to a clinician', async () => {
     process.env.JWT_SECRET = 'test-secret-with-more-than-thirty-two-characters'
     const clinician = await sampleClinician(true)
     stub(Clinician, 'findOne', () => ({ select: async () => clinician }))
@@ -97,25 +101,53 @@ describe('clinician authentication', () => {
   })
 
   it('rejects a patient cookie before looking up any clinician', async () => {
+    process.env.JWT_SECRET = 'test-secret-with-more-than-thirty-two-characters'
+    const token = jwt.sign({ role: 'Patient', id: '64b64c3f4f4a7b2d8e3f1234' }, process.env.JWT_SECRET)
     const res = response()
-    await requireClinician({ cookies: { token: 'patient-session' } }, res, () => {
+    await requireClinician({ cookies: { token } }, res, () => {
       assert.fail('Patient sessions must not enter clinician routes')
     })
     assert.equal(res.statusCode, 403)
     assert.equal(res.body.code, 'INVALID_ROLE')
   })
 
-  it('rejects an unverified clinician session', async () => {
+  it('accepts a Doctor role on the shared token cookie', async () => {
+    process.env.JWT_SECRET = 'test-secret-with-more-than-thirty-two-characters'
+    const clinician = await sampleClinician()
+    stub(Clinician, 'findById', async () => clinician)
+    const token = jwt.sign({ role: 'Doctor', clinicianId: clinician._id }, process.env.JWT_SECRET)
+    const req = { cookies: { token } }
+    let nextCalled = false
+
+    await requireClinician(req, response(), () => { nextCalled = true })
+
+    assert.equal(nextCalled, true)
+    assert.equal(req.user.role, 'Doctor')
+    assert.equal(req.user.clinicianId, clinician._id)
+  })
+
+  it('rejects a Patient role on the shared token cookie', async () => {
+    process.env.JWT_SECRET = 'test-secret-with-more-than-thirty-two-characters'
+    const token = jwt.sign({ role: 'Patient', id: '64b64c3f4f4a7b2d8e3f1234' }, process.env.JWT_SECRET)
+    const res = response()
+    await requireClinician({ cookies: { token } }, res, () => {
+      assert.fail('Patient role cannot enter Doctor routes')
+    })
+    assert.equal(res.statusCode, 403)
+    assert.equal(res.body.code, 'INVALID_ROLE')
+  })
+
+  it('allows a legacy pending clinician through the authenticated route guard', async () => {
     process.env.JWT_SECRET = 'test-secret-with-more-than-thirty-two-characters'
     const clinician = await sampleClinician(false)
     stub(Clinician, 'findById', async () => clinician)
     const token = jwt.sign({ role: 'clinician', clinicianId: clinician._id }, process.env.JWT_SECRET)
-    const res = response()
-    await requireClinician({ cookies: { clinician_token: token } }, res, () => {
-      assert.fail('Unverified clinicians must not pass middleware')
-    })
-    assert.equal(res.statusCode, 403)
-    assert.equal(res.body.code, 'NOT_VERIFIED')
+    const req = { cookies: { clinician_token: token } }
+    let nextCalled = false
+    await requireClinician(req, response(), () => { nextCalled = true })
+    assert.equal(nextCalled, true)
+    assert.equal(req.user.role, 'clinician')
+    assert.equal(req.user.isVerified, undefined)
   })
 
   it('rejects a clinician token when its clinician record no longer exists', async () => {
@@ -130,7 +162,7 @@ describe('clinician authentication', () => {
     assert.equal(res.body.code, 'CLINICIAN_NOT_FOUND')
   })
 
-  it('adds a stable clinician id and permissions after verification', async () => {
+  it('adds a stable clinician id and emergency permissions', async () => {
     process.env.JWT_SECRET = 'test-secret-with-more-than-thirty-two-characters'
     const clinician = await sampleClinician(true)
     stub(Clinician, 'findById', async () => clinician)

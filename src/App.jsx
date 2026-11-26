@@ -11,8 +11,15 @@ import HealthJournal from './pages/HealthJournal.jsx'
 import HealthMetrics from './pages/HealthMetrics.jsx'
 import Profile from './pages/Profile.jsx'
 import ClinicianLogin from './pages/ClinicianLogin.jsx'
-import ClinicianDashboard from './pages/ClinicianDashboard.jsx'
 import ClinicianRoute from './components/ClinicianRoute.jsx'
+import DoctorLayout from './components/DoctorLayout.jsx'
+import DoctorDashboard from './pages/DoctorDashboard.jsx'
+import DoctorPatients from './pages/DoctorPatients.jsx'
+import DoctorPatientProfile from './pages/DoctorPatientProfile.jsx'
+import DoctorAppointments from './pages/DoctorAppointments.jsx'
+import DoctorReports from './pages/DoctorReports.jsx'
+import DoctorProfile from './pages/DoctorProfile.jsx'
+import DoctorRegistration from './pages/DoctorRegistration.jsx'
 import EmergencyAccess from './pages/EmergencyAccess.jsx'
 import { Overview } from './pages/Basic.jsx'
 export default function App() {
@@ -22,8 +29,18 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/clinician/login" element={<ClinicianLogin />} />
+      <Route path="/doctor/register" element={<DoctorRegistration />} />
       <Route path="/emergency/:token" element={<EmergencyAccess />} />
-      <Route path="/clinician/dashboard" element={<ClinicianRoute><ClinicianDashboard /></ClinicianRoute>} />
+      <Route path="/clinician/dashboard" element={<Navigate to="/doctor/dashboard" replace />} />
+      <Route path="/doctor" element={<ClinicianRoute><DoctorLayout /></ClinicianRoute>}>
+        <Route index element={<Navigate to="dashboard" replace />} />
+        <Route path="dashboard" element={<DoctorDashboard />} />
+        <Route path="patients" element={<DoctorPatients />} />
+        <Route path="patients/:patientId" element={<DoctorPatientProfile />} />
+        <Route path="appointments" element={<DoctorAppointments />} />
+        <Route path="reports" element={<DoctorReports />} />
+        <Route path="profile" element={<DoctorProfile />} />
+      </Route>
       <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
         <Route path="/overview" element={<Overview />} />
         <Route path="/health-metrics" element={<HealthMetrics />} />

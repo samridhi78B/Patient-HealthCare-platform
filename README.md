@@ -95,35 +95,21 @@ cd server
 npm install
 ```
 
-## Clinician access, AI summaries and emergency QR
+## Clinician access and emergency QR
 
 These features extend the existing patient account, profile and private report flows. Patient login continues to use its existing `token` cookie. Clinicians use a separate `Clinician` collection and the separate `clinician_token` cookie.
 
-### Configure AI summaries
+### Create a clinician account
 
-1. Keep `GEMINI_API_KEY` only in `server/.env` (the server environment). The example file is `server/.env.example`; do not put the key in a frontend environment file or commit it.
-2. The summary service checks Google's available models and tries `gemini-2.5-flash`, `gemini-1.5-flash`, then `gemini-flash-latest` when listed with `generateContent` support. It retries transient provider errors with backoff and falls through to other listed text Flash models after a model-specific failure.
-3. A patient can open a report preview and choose **Generate AI Summary**. The report text is sent to Google Gemini, so get the patient's agreement first. The extracted text is not stored; the generated summary and source-linked extracted findings are saved in MongoDB.
-4. Text PDFs are read with `pdf-parse`. JPG/PNG reports are read with English Tesseract OCR. Scans with no readable text are rejected instead of being sent as an empty report. The API key is never returned to the browser.
-
-### Create and verify a clinician
-
-1. Open `/clinician/login`, choose **New clinician? Register for verification**, and submit the clinician's name, email, password, license number, specialization and hospital.
-2. New accounts are always created with `isVerified: false`. A registration cannot verify itself and cannot select a different role.
-3. A trusted server/database operator verifies the credentials outside the public web API:
-
-   ```bash
-   npm --prefix server run clinician:verify -- doctor@example.com
-   ```
-
-4. The clinician can then sign in at `/clinician/login` and use `/clinician/dashboard`. The verification command requires the operator's access to the server environment and MongoDB.
+1. Open `/clinician/login`, choose **New clinician? Register**, and submit the clinician's name, email, password, license number, specialization and hospital.
+2. The clinician can sign in immediately at `/clinician/login` and use `/clinician/dashboard`.
 
 ### Emergency QR privacy and access
 
 - The patient's profile creates a QR code containing only a random 256-bit opaque token. The token hash is used for lookup; the token is encrypted at rest so the profile can show the same QR again. The encryption key is derived from `JWT_SECRET`.
 - QR credentials expire after one year and can be regenerated or revoked by the patient. Regeneration/revocation also closes active emergency sessions.
-- A QR scan alone never returns medical data. A verified clinician must sign in, provide a reason, and receive a ten-minute session. The server checks the QR, clinician identity, session owner and expiry on every protected request.
-- Emergency summaries label patient-entered, document-extracted and clinician-entered information separately. AI observations start as unreviewed and never become confirmed diagnoses automatically. Clinicians can verify findings or add their own verified records.
+- A QR scan alone never returns medical data. A clinician must sign in, provide a reason, and receive a ten-minute, read-only session limited to emergency details and medical-report names and dates. The server checks the QR, clinician identity, session owner and expiry on every protected request; QR sessions cannot access detailed reports or change records.
+- Emergency summaries label patient-entered, document-extracted and clinician-entered information separately. Clinicians can verify findings or add their own verified records.
 - Access, summary views, detailed report reads, record changes and QR issue/revocation events are written to `AuditLog`. The clinician dashboard shows that clinician's own access history.
 - Changing `JWT_SECRET` invalidates sessions and the encrypted QR token material; patients should regenerate their QR after a secret rotation.
 
@@ -136,7 +122,7 @@ npm --prefix server test
 npm run build
 ```
 
-These automated tests cover authentication boundaries, pending clinician verification, QR token handling, emergency session ownership/expiry checks, audit identity, report ownership, textless/invalid reports, and AI response/provider errors. Full live end-to-end testing also requires a running MongoDB instance and a configured OpenAI API key. Image OCR uses Tesseract's English language data.
+These automated tests cover authentication boundaries, legacy clinician accounts, QR token handling, emergency session ownership/expiry checks, audit identity, report ownership, and invalid report handling. Full live end-to-end testing also requires a running MongoDB instance.
 
 These project features are for demonstration and education; they are not a claim of regulatory certification or a substitute for clinical judgment.
 

@@ -2,12 +2,9 @@ const fs = require('fs')
 const fsp = require('fs/promises')
 const path = require('path')
 const mongoose = require('mongoose')
-const crypto = require('crypto')
 const MedicalReport = require('../models/MedicalReport')
 const MedicalHistoryItem = require('../models/MedicalHistoryItem')
 const { STORAGE_DIR } = require('../middleware/upload')
-const { extractReportText } = require('../services/reportTextService')
-const { generateSummary } = require('../services/aiSummaryService')
 const { CATEGORIES } = MedicalReport
 const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const httpErr = (status, message) => Object.assign(new Error(message), { status })
@@ -26,14 +23,14 @@ exports.list = async (req, res) => {
   const q = { owner: req.user._id }
   if (search) { const re = new RegExp(esc(String(search)), 'i'); q.$or = [{ title: re }, { originalName: re }] }
   if (CATEGORIES.includes(category)) q.category = category
-  res.json({ reports: await MedicalReport.find(q).select('-aiSummary').sort({ createdAt: sort === 'oldest' ? 1 : -1 }) })
+  res.json({ reports: await MedicalReport.find(q).sort({ createdAt: sort === 'oldest' ? 1 : -1 }) })
 }
 exports.summary = async (req, res) => {
   const owner = req.user._id
   const since = new Date(Date.now() - 30 * 864e5)
   const [total, recent, recentCount, cats] = await Promise.all([
     MedicalReport.countDocuments({ owner }),
-    MedicalReport.find({ owner }).select('-aiSummary').sort({ createdAt: -1 }).limit(3),
+    MedicalReport.find({ owner }).sort({ createdAt: -1 }).limit(3),
     MedicalReport.countDocuments({ owner, createdAt: { $gte: since } }),
     MedicalReport.aggregate([{ $match: { owner } }, { $group: { _id: '$category', count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
   ])
@@ -50,65 +47,6 @@ exports.upload = async (req, res) => {
   } catch (e) { await fsp.unlink(req.file.path).catch(() => {}); throw e }
 }
 exports.getOne = async (req, res) => res.json({ report: await findOwned(req) })
-exports.generateAiSummary = async (req, res) => {
-  const report = await findOwned(req)
-  if (!fs.existsSync(filePath(report))) throw httpErr(410, 'The stored file is missing')
-  const reportText = await extractReportText(filePath(report), report.mimeType)
-  const aiSummary = await generateSummary(reportText)
-  const generatedAt = new Date()
-  report.aiSummary = {
-    ...aiSummary,
-    generatedAt,
-  }
-  await report.save()
-
-  const updates = []
-  for (const parameter of aiSummary.parameters) {
-    const item = {
-      type: 'parameter',
-      title: parameter.name,
-      value: parameter.value,
-      unit: parameter.unit,
-      referenceRange: parameter.referenceRange,
-      details: `${parameter.status}: ${parameter.explanation}`.slice(0, 2000),
-      evidence: parameter.evidence,
-    }
-    updates.push(makeHistoryUpdate(report, item))
-  }
-  for (const diagnosis of aiSummary.explicitDiagnoses) {
-    updates.push(makeHistoryUpdate(report, {
-      type: 'reported-diagnosis',
-      title: diagnosis.text,
-      details: 'Explicitly mentioned in the report; not verified as a confirmed diagnosis.',
-      evidence: diagnosis.evidence,
-    }))
-  }
-  if (updates.length) await MedicalHistoryItem.bulkWrite(updates, { ordered: false })
-  res.json({ message: 'AI summary generated and saved', report })
-}
-function makeHistoryUpdate(report, finding) {
-  const sourceKey = crypto.createHash('sha256')
-    .update(JSON.stringify([report._id.toString(), finding.type, finding.title, finding.value || '', finding.unit || '', finding.referenceRange || '', finding.evidence || '']))
-    .digest('hex')
-  return {
-    updateOne: {
-      filter: { owner: report.owner, sourceKey },
-      update: {
-        $setOnInsert: {
-          owner: report.owner,
-          report: report._id,
-          sourceKey,
-          sourceReportTitle: report.title,
-          source: 'report-extracted',
-          verificationStatus: 'unreviewed',
-          observedAt: null,
-          ...finding,
-        },
-      },
-      upsert: true,
-    },
-  }
-}
 exports.addTestResult = async (req, res) => {
   const { testName, value, unit, testDate } = req.body || {}
   if (typeof testName !== 'string' || !testName.trim() || testName.trim().length > 120) throw httpErr(400, 'Test name is required and must be 120 characters or fewer')

@@ -22,13 +22,42 @@ export default function Reports() {
   const upload = async (fd, onProgress) => {
     try { const d = await reportsApi.upload(fd, onProgress); toast.success(d.message); await load() } catch (e) { throw errMsg(e) }
   }
+  const loadDemoPreview = async report => {
+    const response = await fetch('/MedLink_Demo_Prescription.pdf')
+    if (!response.ok) throw new Error('The local demo prescription PDF could not be loaded.')
+    return {
+      report: { ...report, mimeType: 'application/pdf' },
+      url: URL.createObjectURL(await response.blob()),
+    }
+  }
   const openPreview = async r => {
     setPreview({ report: r, loading: true })
     try {
       const [detail, res] = await Promise.all([reportsApi.get(r._id), reportsApi.file(r._id, true)])
       setPreview({ report: detail.report, url: URL.createObjectURL(res.data) })
     }
-    catch (e) { setPreview({ report: r, error: 'Could not load the preview. ' + (e.response?.status === 404 ? 'The report was not found.' : errMsg(e)) }) }
+    catch (e) {
+      const isDemoReport = [r.originalName, r.title]
+        .some(value => value?.toLowerCase().includes('medlink_demo_prescription.pdf'))
+      const missingReportFile = [404, 410].includes(e.response?.status)
+      const backendUnavailable = !e.response && e.request
+      if (isDemoReport && (missingReportFile || backendUnavailable)) {
+        try {
+          setPreview(await loadDemoPreview(r))
+          return
+        } catch (fallbackError) {
+          setPreview({ report: r, error: `Could not load the demo preview. ${fallbackError.message}` })
+          return
+        }
+      }
+
+      const message = backendUnavailable
+        ? 'Backend not running - start backend with npm run dev'
+        : e.response?.status === 404
+          ? 'The report was not found.'
+          : errMsg(e)
+      setPreview({ report: r, error: `Could not load the preview. ${message}` })
+    }
   }
   useEffect(() => {
     const reportId = new URLSearchParams(location.search).get('report')
@@ -39,17 +68,6 @@ export default function Reports() {
       openPreview(report)
     }
   }, [location.search, loading, reports])
-  const generateAiSummary = async () => {
-    const reportId = preview?.report?._id
-    if (!reportId) return
-    setPreview(current => current ? { ...current, summaryLoading: true, summaryError: '' } : current)
-    try {
-      const result = await reportsApi.generateAiSummary(reportId)
-      setPreview(current => current ? { ...current, report: result.report, summaryLoading: false, summaryError: '' } : current)
-    } catch (e) {
-      setPreview(current => current ? { ...current, summaryLoading: false, summaryError: errMsg(e) } : current)
-    }
-  }
   const download = async r => {
     try { const res = await reportsApi.file(r._id, false); const u = URL.createObjectURL(res.data); const a = document.createElement('a'); a.href = u; a.download = r.originalName; a.click(); URL.revokeObjectURL(u); toast.success('Download started') }
     catch (e) { toast.error(errMsg(e)) }
@@ -74,7 +92,7 @@ export default function Reports() {
       : loading ? <TableSkeleton /> : !reports.length ? <EmptyState filtered={filtered} onClear={() => { setSearch(''); setCategory('') }} />
       : <ReportTable reports={reports} onPreview={openPreview} onDownload={download} onDelete={setConfirm} />}
     </section>
-    {preview && <PreviewModal report={preview.report} blobUrl={preview.url} loading={preview.loading} error={preview.error} summaryLoading={preview.summaryLoading} summaryError={preview.summaryError} onGenerateSummary={generateAiSummary} onClose={() => setPreview(null)} />}
+    {preview && <PreviewModal report={preview.report} blobUrl={preview.url} loading={preview.loading} error={preview.error} onClose={() => setPreview(null)} />}
     {confirm && <ConfirmDialog report={confirm} busy={deleting} onCancel={() => setConfirm(null)} onConfirm={remove} />}
   </div>)
 }

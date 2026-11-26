@@ -1,0 +1,22 @@
+const router = require('express').Router()
+const controller = require('../controllers/doctorController')
+const clinicianController = require('../controllers/clinicianController')
+const { requireClinician } = require('../middleware/auth')
+const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
+
+router.use(requireClinician)
+router.get('/dashboard', wrap(controller.dashboard))
+router.get('/patients', wrap(controller.listPatients))
+router.get('/patients/:patientId', wrap(controller.patientProfile))
+router.post('/patients/:patientId/notes', wrap(controller.addNote))
+router.get('/appointments', wrap(controller.listAppointments))
+router.patch('/appointments/:id', wrap(controller.updateAppointment))
+router.post('/appointments/:id/reschedule', wrap(controller.rescheduleAppointment))
+router.get('/reports', wrap(controller.listReports))
+router.patch('/reports/:reportId/review', wrap(controller.reviewReport))
+router.get('/reports/:reportId/download', wrap(controller.downloadReport))
+router.get('/profile', wrap(controller.profile))
+router.put('/profile', wrap(clinicianController.updateProfile))
+router.post('/profile/password', wrap(clinicianController.changePassword))
+
+module.exports = router

@@ -29,7 +29,7 @@ export default function Landing() {
             <p className="section-kicker">{t('home.eyebrow')}</p>
             <h1 className="mt-5 max-w-3xl text-[clamp(3rem,7vw,6.8rem)] leading-[.94]">{t('home.title')} <span className="hl">{t('home.titleEmphasis')}</span></h1>
             <p className="mt-6 max-w-xl text-base leading-7 text-navy-500 sm:text-lg">{t('home.description')}</p>
-            <div className="mt-8 flex flex-wrap gap-3"><Link to="/register" className="btn-primary px-5 py-3">{t('home.getStarted')} <ArrowRight size={16} /></Link><Link to="/login" className="btn-outline px-5 py-3">{t('home.loginAccount')}</Link></div>
+            <div className="mt-8 flex flex-wrap gap-3"><Link to="/register" className="btn-primary px-5 py-3">{t('home.getStarted')} <ArrowRight size={16} /></Link></div>
             <div className="mt-8 flex items-center gap-2 text-xs text-navy-500"><ShieldCheck size={16} className="text-teal-700" />{t('home.privateAccess')}</div>
           </div>
           <div className="relative mx-auto w-full max-w-xl">

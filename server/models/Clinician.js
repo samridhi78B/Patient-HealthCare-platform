@@ -7,8 +7,12 @@ const clinicianSchema = new mongoose.Schema({
   licenseNumber: { type: String, required: true, unique: true, uppercase: true, trim: true, maxlength: 60 },
   specialization: { type: String, required: true, trim: true, maxlength: 120 },
   hospital: { type: String, required: true, trim: true, maxlength: 160 },
+  phone: { type: String, trim: true, maxlength: 20, default: '' },
+  experienceYears: { type: Number, min: 0, max: 80, default: 0 },
+  about: { type: String, trim: true, maxlength: 2000, default: '' },
+  avatarUrl: { type: String, trim: true, maxlength: 2000, default: '' },
+  providerDoctorIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Doctor' }],
   role: { type: String, enum: ['clinician'], default: 'clinician', immutable: true },
-  isVerified: { type: Boolean, default: false },
 }, { timestamps: true })
 
 clinicianSchema.set('toJSON', {

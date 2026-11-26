@@ -12,10 +12,10 @@ const statusLabel = item => {
   if (item.verificationStatus === 'clinician-verified') return 'Clinician-verified'
   if (item.verificationStatus === 'patient-reviewed') return 'Patient-reviewed'
   if (item.source === 'patient-entered') return 'Patient-entered; not independently verified'
-  return 'Unreviewed — AI-extracted, not a confirmed diagnosis'
+  return 'Unreviewed — document-extracted, not a confirmed diagnosis'
 }
 
-export default function EmergencyPatientView({ access, onClose }) {
+export default function EmergencyPatientView({ access, onClose, onAuthDenied, readOnly = false }) {
   const [records, setRecords] = useState(null)
   const [loadingRecords, setLoadingRecords] = useState(false)
   const [error, setError] = useState('')
@@ -30,7 +30,13 @@ export default function EmergencyPatientView({ access, onClose }) {
     try {
       await emergencyApi.close(access.accessToken)
       onClose?.()
-    } catch (reason) { setError(errMsg(reason)) }
+    } catch (reason) {
+      if (readOnly && [401, 403].includes(reason.response?.status)) {
+        onAuthDenied?.()
+        return
+      }
+      setError(errMsg(reason))
+    }
   }
 
   const loadRecords = async () => {
@@ -69,6 +75,36 @@ export default function EmergencyPatientView({ access, onClose }) {
     } catch (reason) { setError(errMsg(reason)) } finally { setCreating(false) }
   }
 
+  if (readOnly) {
+    const showList = values => values?.length ? values : ['Not provided']
+    return (
+      <section className="health-panel space-y-5 p-5 sm:p-7" aria-label="Authorized emergency details">
+        <header className="flex flex-wrap items-start justify-between gap-3 border-b border-ink/10 pb-4">
+          <div><p className="section-kicker">Emergency details</p><h2 className="mt-1 text-2xl">{notProvided(summary.patient.name)}</h2>
+            <p className="mt-1 text-sm text-navy-500">Read-only emergency information</p></div>
+          {onClose && <button className="btn-outline" type="button" onClick={closeSession}>Close record</button>}
+        </header>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="health-detail"><p>Blood group</p><strong>{notProvided(summary.bloodGroup)}</strong></div>
+          <div className="health-detail"><p>Known allergies</p><ul className="mt-2 space-y-1 text-sm">{showList(summary.allergies).map((value, index) => <li key={index}>{value}</li>)}</ul></div>
+          <div className="health-detail"><p>Chronic conditions</p><ul className="mt-2 space-y-1 text-sm">{showList(summary.medicalConditions).map((value, index) => <li key={index}>{value}</li>)}</ul></div>
+          <div className="health-detail"><p>Current medications</p><ul className="mt-2 space-y-1 text-sm">{showList(summary.currentMedications).map((value, index) => <li key={index}>{value}</li>)}</ul></div>
+          <div className="health-detail sm:col-span-2"><p>Emergency contacts</p><ul className="mt-2 space-y-2 text-sm">{summary.emergencyContacts.map((contact, index) => <li key={`${contact.name}-${index}`}>{contact.name} · {contact.relationship || 'Relationship not provided'} · {contact.phone}</li>)}</ul></div>
+        </div>
+        <section>
+          <h3 className="text-lg font-semibold">Medical reports</h3>
+          {!summary.medicalReports?.length ? <p className="mt-3 text-sm text-navy-500">Not provided</p> : <ul className="mt-3 space-y-3">
+            {summary.medicalReports.map((report, index) => <li key={`${report.title}-${index}`} className="rounded-xl border border-ink/10 p-4">
+              <p className="font-semibold">{report.title}</p>
+              <p className="mt-1 text-xs text-navy-500">{report.createdAt ? new Date(report.createdAt).toLocaleDateString() : 'Date not provided'}</p>
+            </li>)}
+          </ul>}
+        </section>
+        {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      </section>
+    )
+  }
+
   const downloadReport = async report => {
     try {
       const response = await emergencyApi.reportFile(access.accessToken, report._id)
@@ -82,9 +118,9 @@ export default function EmergencyPatientView({ access, onClose }) {
   }
 
   return (
-    <section className="health-panel space-y-5 p-5 sm:p-7" aria-label="Authorized emergency medical summary">
+    <section className="health-panel space-y-5 p-5 sm:p-7" aria-label="Authorized emergency details">
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-ink/10 pb-4">
-        <div><p className="section-kicker">Emergency medical summary</p><h2 className="mt-1 text-2xl">{notProvided(summary.patient.name)}</h2>
+        <div><p className="section-kicker">Emergency details</p><h2 className="mt-1 text-2xl">{notProvided(summary.patient.name)}</h2>
           <p className="mt-1 text-sm text-navy-500">Access expires at {new Date(access.expiresAt).toLocaleTimeString()}</p></div>
         {onClose && <button className="btn-outline" type="button" onClick={closeSession}>Close record</button>}
       </header>
@@ -106,7 +142,7 @@ export default function EmergencyPatientView({ access, onClose }) {
 
       <section>
         <h3 className="text-lg font-semibold">Medical history and recent observations</h3>
-        <p className="mt-1 text-xs text-navy-500">Sources and verification states are shown separately. AI-extracted observations are not confirmed diagnoses.</p>
+        <p className="mt-1 text-xs text-navy-500">Sources and verification states are shown separately. Document-extracted observations are not confirmed diagnoses.</p>
         {!history.length ? <p className="mt-3 text-sm text-navy-500">Not provided</p> : <ul className="mt-3 space-y-3">
           {history.map(item => <li key={item._id || item.id} className="rounded-xl border border-ink/10 p-4">
             <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="font-semibold">{item.title}{item.value ? `: ${item.value} ${item.unit || ''}` : ''}</p>

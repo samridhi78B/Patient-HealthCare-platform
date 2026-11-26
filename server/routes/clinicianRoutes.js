@@ -17,6 +17,8 @@ router.post('/register', signInLimit, wrap(controller.register))
 router.post('/login', signInLimit, wrap(controller.login))
 router.post('/logout', wrap(controller.logout))
 router.get('/me', requireClinician, wrap(controller.me))
+router.put('/profile', requireClinician, wrap(controller.updateProfile))
+router.post('/profile/password', requireClinician, wrap(controller.changePassword))
 router.get('/access-history', requireClinician, wrap(emergencyController.patientAccessHistory))
 router.post('/patients/:patientId/qr/revoke', requireClinician, wrap(emergencyController.revokePatientQr))
 

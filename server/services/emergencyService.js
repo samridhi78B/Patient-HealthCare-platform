@@ -81,7 +81,7 @@ async function revokeQr(user, req) {
   await logPatientAction(req, user._id, 'QR_REVOKE')
 }
 
-async function openEmergencyAccess({ patient, clinician, reason }) {
+async function openEmergencyAccess({ patient, clinician, reason, readOnly = false }) {
   const token = randomToken()
   const expiresAt = new Date(Date.now() + ACCESS_LIFETIME_MS)
   await EmergencyAccessSession.create({
@@ -89,12 +89,35 @@ async function openEmergencyAccess({ patient, clinician, reason }) {
     patientId: patient._id,
     clinicianId: clinician.clinicianId,
     reason,
+    readOnly,
     expiresAt,
   })
   return { token, expiresAt }
 }
 
-async function emergencySummary(patient) {
+async function emergencySummary(patient, { readOnly = false } = {}) {
+  const listOrNotProvided = values => values?.length ? values : ['Not provided']
+  if (readOnly) {
+    const reports = await MedicalReport.find({ owner: patient._id })
+      .select('title createdAt')
+      .sort({ createdAt: -1 })
+      .limit(20)
+    return {
+      patient: { name: patient.name || 'Not provided' },
+      bloodGroup: patient.bloodGroup || 'Not provided',
+      allergies: listOrNotProvided(patient.allergies),
+      medicalConditions: listOrNotProvided(patient.medicalConditions),
+      currentMedications: listOrNotProvided(patient.currentMedications),
+      emergencyContacts: patient.emergencyContacts?.length
+        ? patient.emergencyContacts
+        : [{ name: 'Not provided', relationship: '', phone: 'Not provided' }],
+      medicalReports: reports.map(report => ({
+        title: report.title,
+        createdAt: report.createdAt,
+      })),
+    }
+  }
+
   const [items, reports] = await Promise.all([
     MedicalHistoryItem.find({ owner: patient._id })
       .sort({ observedAt: -1, createdAt: -1 })
@@ -103,7 +126,7 @@ async function emergencySummary(patient) {
       .populate('createdByClinician', 'name licenseNumber specialization')
       .populate('verifiedByClinician', 'name licenseNumber'),
     MedicalReport.find({ owner: patient._id })
-      .select('title originalName testResults')
+      .select('title originalName testResults category createdAt')
       .sort({ createdAt: -1 })
       .limit(20),
   ])
@@ -148,7 +171,6 @@ async function emergencySummary(patient) {
   const combinedHistory = [...history, ...patientEnteredResults]
     .sort((left, right) => new Date(right.observedAt || 0) - new Date(left.observedAt || 0))
     .slice(0, 30)
-  const listOrNotProvided = values => values?.length ? values : ['Not provided']
   return {
     patient: {
       id: patient._id,
@@ -166,6 +188,11 @@ async function emergencySummary(patient) {
     profileSource: 'Patient-entered profile information',
     history: combinedHistory,
     recentObservations: combinedHistory.filter(item => ['parameter', 'observation', 'reported-diagnosis'].includes(item.type)).slice(0, 10),
+    medicalReports: reports.map(report => ({
+      title: report.title,
+      category: report.category || 'General',
+      createdAt: report.createdAt,
+    })),
   }
 }
 

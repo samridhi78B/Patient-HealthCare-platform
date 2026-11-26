@@ -88,6 +88,7 @@ describe('emergency access security', () => {
     assert.ok(foundQuery.emergencyQrExpiresAt.$gt instanceof Date)
     assert.equal(sessionRecord.patientId.toString(), patient._id.toString())
     assert.equal(sessionRecord.clinicianId, '64b64c3f4f4a7b2d8e3f1234')
+    assert.equal(sessionRecord.readOnly, true)
     assert.ok(sessionRecord.expiresAt > new Date())
     assert.equal(auditRecord.action, 'SUMMARY_VIEW')
     assert.equal(auditRecord.clinicianId, '64b64c3f4f4a7b2d8e3f1234')
@@ -97,7 +98,24 @@ describe('emergency access security', () => {
     assert.equal(auditRecord.userAgent, 'test-agent')
     assert.match(auditRecord.reason, /Unconscious patient/)
     assert.equal(res.body.summary.patient.name, 'Patient Example')
+    assert.equal(res.body.summary.history, undefined)
+    assert.equal(res.body.summary.patient.dateOfBirth, undefined)
+    assert.deepEqual(res.body.summary.medicalReports, [])
     assert.equal(res.headers['Cache-Control'], 'private, no-store')
+  })
+
+  it('blocks reads and writes beyond the summary for a QR emergency session', async () => {
+    const req = {
+      ...request({ type: 'observation', title: 'Test record' }),
+      emergencyAccess: { readOnly: true },
+      params: { itemId: '64b64c3f4f4a7b2d8e3f9999', reportId: '64b64c3f4f4a7b2d8e3f9999' },
+    }
+    const readOnlyError = error => error.status === 403 && error.code === 'READ_ONLY_SESSION'
+    await assert.rejects(controller.records(req, response()), readOnlyError)
+    await assert.rejects(controller.downloadReport(req, response()), readOnlyError)
+    await assert.rejects(controller.verifyHistoryItem(req, response()), readOnlyError)
+    await assert.rejects(controller.addHistoryItem(req, response()), readOnlyError)
+    await assert.rejects(controller.records({ ...req, emergencyAccess: {} }, response()), readOnlyError)
   })
 
   it('returns no patient data for revoked or expired QR tokens', async () => {
@@ -191,7 +209,7 @@ describe('emergency access security', () => {
     assert.equal(sessionUpdates, 2)
   })
 
-  it('shows report-derived observations as unverified and keeps patient-entered test results separate', async () => {
+  it('keeps patient-entered test results separate from report-derived observations', async () => {
     const patient = new User({
       _id: '64b64c3f4f4a7b2d8e3f9999',
       name: 'Patient Example',
@@ -211,6 +229,8 @@ describe('emergency access security', () => {
     stub(MedicalReport, 'find', () => resultQuery([{
       _id: new mongoose.Types.ObjectId(),
       title: 'Blood test',
+      category: 'Blood Test',
+      createdAt: new Date('2025-01-03T00:00:00.000Z'),
       originalName: 'blood.pdf',
       testResults: [{ _id: new mongoose.Types.ObjectId(), testName: 'Hemoglobin', value: 12.1, unit: 'g/dL', testDate: new Date('2025-01-02') }],
     }]))
@@ -223,5 +243,31 @@ describe('emergency access security', () => {
     assert.equal(entered.title, 'Hemoglobin')
     assert.equal(entered.value, '12.1')
     assert.equal(entered.verificationStatus, 'unreviewed')
+    assert.deepEqual(summary.medicalReports, [{
+      title: 'Blood test',
+      category: 'Blood Test',
+      createdAt: new Date('2025-01-03T00:00:00.000Z'),
+    }])
+  })
+
+  it('returns only report names and dates in a QR emergency summary', async () => {
+    const patient = new User({
+      _id: '64b64c3f4f4a7b2d8e3f9999',
+      name: 'Patient Example',
+      email: 'patient@example.com',
+      phone: '+12345678901',
+      password: 'not-used',
+    })
+    const createdAt = new Date('2025-01-03T00:00:00.000Z')
+    stub(MedicalReport, 'find', () => resultQuery([{
+      title: 'Blood test',
+      category: 'Blood Test',
+      createdAt,
+      aiSummary: { overview: 'This must not be returned.' },
+    }]))
+
+    const summary = await emergencySummary(patient, { readOnly: true })
+    assert.deepEqual(summary.medicalReports, [{ title: 'Blood test', createdAt }])
+    assert.deepEqual(Object.keys(summary.patient), ['name'])
   })
 })

@@ -12,9 +12,10 @@ const permissions = Object.freeze([
 ])
 
 exports.requireClinician = async (req, res, next) => {
-  const token = req.cookies?.clinician_token
+  const sharedToken = req.cookies?.token
+  const legacyToken = req.cookies?.clinician_token
+  const token = sharedToken || legacyToken
   if (!token) {
-    if (req.cookies?.token) return res.status(403).json({ code: 'INVALID_ROLE', message: 'A clinician account is required' })
     return res.status(401).json({ code: 'AUTH_REQUIRED', message: 'Clinician sign-in is required' })
   }
 
@@ -25,28 +26,25 @@ exports.requireClinician = async (req, res, next) => {
     return res.status(401).json({ code: 'INVALID_SESSION', message: 'Clinician session is expired or invalid' })
   }
 
-  if (decoded.role !== 'clinician' || !mongoose.isValidObjectId(decoded.clinicianId)) {
+  const legacyClinicianSession = !sharedToken && decoded.role === 'clinician'
+  const clinicianId = decoded.clinicianId || (legacyClinicianSession ? decoded.id : null)
+  if ((!legacyClinicianSession && decoded.role !== 'Doctor') || !mongoose.isValidObjectId(clinicianId)) {
     return res.status(403).json({ code: 'INVALID_ROLE', message: 'A clinician account is required' })
   }
 
   try {
-    const clinician = await Clinician.findById(decoded.clinicianId)
+    const clinician = await Clinician.findById(clinicianId)
     if (!clinician || clinician.role !== 'clinician') {
       return res.status(403).json({ code: 'CLINICIAN_NOT_FOUND', message: 'Clinician account is not available' })
     }
-    if (!clinician.isVerified) {
-      return res.status(403).json({ code: 'NOT_VERIFIED', message: 'Clinician verification is still pending' })
-    }
-
     req.user = {
       id: clinician._id.toString(),
       clinicianId: clinician._id.toString(),
       name: clinician.name,
       email: clinician.email,
-      role: 'clinician',
+      role: legacyClinicianSession ? 'clinician' : 'Doctor',
       licenseNumber: clinician.licenseNumber,
       permissions,
-      isVerified: true,
     }
     return next()
   } catch (error) {

@@ -12,6 +12,7 @@ const appointmentSchema = new mongoose.Schema({
   appointmentAt: { type: Date, required: true },
   fee: { type: Number, required: true, min: 0 },
   status: { type: String, enum: ['upcoming', 'completed', 'cancelled'], default: 'upcoming', required: true },
+  acceptedAt: { type: Date, default: null },
   isDemo: { type: Boolean, default: true },
 }, { timestamps: true })
 

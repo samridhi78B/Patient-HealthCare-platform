@@ -6,7 +6,7 @@ const schema = new mongoose.Schema({
   patientId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   action: {
     type: String,
-    enum: ['EMERGENCY_READ', 'QR_ISSUE', 'QR_REVOKE', 'SUMMARY_VIEW', 'HISTORY_VERIFY', 'MEDICAL_RECORD_CREATE', 'ACCESS_SESSION_CLOSE'],
+    enum: ['EMERGENCY_READ', 'QR_ISSUE', 'QR_REVOKE', 'SUMMARY_VIEW', 'HISTORY_VERIFY', 'MEDICAL_RECORD_CREATE', 'ACCESS_SESSION_CLOSE', 'PATIENT_RECORD_READ', 'REPORT_REVIEW', 'REPORT_READ', 'DOCTOR_NOTE_CREATE', 'APPOINTMENT_UPDATE'],
     required: true,
   },
   actorType: { type: String, enum: ['clinician', 'patient'], required: true },
